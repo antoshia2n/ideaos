@@ -8,8 +8,8 @@ export function saveIdeas(ideas) {
   try { localStorage.setItem(KEY_IDEAS, JSON.stringify(ideas)) } catch {}
 }
 export function loadCreds() {
-  try { const r = localStorage.getItem(KEY_CREDS); return r ? JSON.parse(r) : { url: '', key: '' } } catch { return { url: '', key: '' } }
+  try { const r = localStorage.getItem(KEY_CREDS); return r ? JSON.parse(r) : { url: '', key: '', notionToken: '', notionDbId: '' } } catch { return { url: '', key: '', notionToken: '', notionDbId: '' } }
 }
-export function saveCreds(url, key) {
-  try { localStorage.setItem(KEY_CREDS, JSON.stringify({ url, key })) } catch {}
+export function saveCreds(url, key, notionToken = '', notionDbId = '') {
+  try { localStorage.setItem(KEY_CREDS, JSON.stringify({ url, key, notionToken, notionDbId })) } catch {}
 }
