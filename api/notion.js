@@ -41,6 +41,9 @@ export default async function handler(req) {
   // title型のプロパティ名を動的に取得
   const titlePropName = Object.entries(db.properties).find(([, v]) => v.type === 'title')?.[0] || 'title'
 
+  // 今日の日付（ISO形式 YYYY-MM-DD）
+  const today = new Date().toISOString().slice(0, 10)
+
   // プロパティを組み立て
   const properties = {
     [titlePropName]: { title: [{ text: { content: title || '無題' } }] },
@@ -49,6 +52,11 @@ export default async function handler(req) {
   // ジャンルプロパティがあればタグをmulti_selectで送る
   if (tags && tags.length > 0 && db.properties['ジャンル']?.type === 'multi_select') {
     properties['ジャンル'] = { multi_select: tags.map(t => ({ name: t })) }
+  }
+
+  // 日付プロパティがあれば今日の日付を送る
+  if (db.properties['日付']?.type === 'date') {
+    properties['日付'] = { date: { start: today } }
   }
 
   // メモをページ本文に追加
