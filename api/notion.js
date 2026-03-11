@@ -22,31 +22,45 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'token and database_id are required' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
   }
 
-  const payload = {
-    parent: { database_id },
-    properties: {
-      Name: { title: [{ text: { content: title || '無題' } }] },
+  // DBのプロパティ一覧を取得
+  const dbRes = await fetch(`https://api.notion.com/v1/databases/${database_id}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Notion-Version': '2022-06-28',
     },
-    children: [],
-  }
-
-  // タグがあればプロパティに追加（multi_select想定）
-  if (tags && tags.length > 0) {
-    payload.properties['タグ'] = {
-      multi_select: tags.map(t => ({ name: t })),
-    }
-  }
-
-  // メモがあればページ本文に追加
-  if (memo) {
-    payload.children.push({
-      object: 'block',
-      type: 'paragraph',
-      paragraph: {
-        rich_text: [{ type: 'text', text: { content: memo } }],
-      },
+  })
+  if (!dbRes.ok) {
+    const err = await dbRes.json()
+    return new Response(JSON.stringify({ error: 'DB取得失敗', detail: err }), {
+      status: dbRes.status,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     })
   }
+  const db = await dbRes.json()
+
+  // title型のプロパティ名を動的に取得
+  const titlePropName = Object.entries(db.properties).find(([, v]) => v.type === 'title')?.[0] || 'title'
+
+  // プロパティを組み立て
+  const properties = {
+    [titlePropName]: { title: [{ text: { content: title || '無題' } }] },
+  }
+
+  // ジャンルプロパティがあればタグをmulti_selectで送る
+  if (tags && tags.length > 0 && db.properties['ジャンル']?.type === 'multi_select') {
+    properties['ジャンル'] = { multi_select: tags.map(t => ({ name: t })) }
+  }
+
+  // メモをページ本文に追加
+  const children = []
+  if (memo) {
+    children.push({
+      object: 'block', type: 'paragraph',
+      paragraph: { rich_text: [{ type: 'text', text: { content: memo } }] },
+    })
+  }
+
+  const payload = { parent: { database_id }, properties, children }
 
   const res = await fetch('https://api.notion.com/v1/pages', {
     method: 'POST',
