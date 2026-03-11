@@ -12,22 +12,26 @@ import TabSearch from './tabs/TabSearch'
 import TabExpand from './tabs/TabExpand'
 
 export default function App() {
-  const [tab, setTab]             = useState(0)
-  const [ideas, setIdeas]         = useState([])
-  const [templates, setTemplates] = useState(DEFAULT_TPL)
-  const [sbUrl, setSbUrl]         = useState('')
-  const [sbKey, setSbKey]         = useState('')
-  const [toast, setToast]         = useState(null)
-  const [loading, setLoading]     = useState(false)
-  const [showTpl, setShowTpl]     = useState(false)
-  const [title, setTitle]         = useState('')
-  const [tags, setTags]           = useState('')
-  const [memo, setMemo]           = useState('')
+  const [tab, setTab]               = useState(0)
+  const [ideas, setIdeas]           = useState([])
+  const [templates, setTemplates]   = useState(DEFAULT_TPL)
+  const [sbUrl, setSbUrl]           = useState('')
+  const [sbKey, setSbKey]           = useState('')
+  const [notionToken, setNotionToken] = useState('')
+  const [notionDbId, setNotionDbId]   = useState('')
+  const [toast, setToast]           = useState(null)
+  const [loading, setLoading]       = useState(false)
+  const [showTpl, setShowTpl]       = useState(false)
+  const [title, setTitle]           = useState('')
+  const [tags, setTags]             = useState('')
+  const [memo, setMemo]             = useState('')
 
   useEffect(() => {
     setIdeas(loadIdeas())
     const creds = loadCreds()
     if (creds.url) { setSbUrl(creds.url); setSbKey(creds.key); loadTemplates(creds.url, creds.key) }
+    if (creds.notionToken) setNotionToken(creds.notionToken)
+    if (creds.notionDbId)  setNotionDbId(creds.notionDbId)
   }, [])
 
   function showToastMsg(msg, type = 'ok') { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
@@ -37,19 +41,47 @@ export default function App() {
     try { const rows = await sbList(url, key); setTemplates(rows?.length > 0 ? [...DEFAULT_TPL, ...rows] : DEFAULT_TPL) } catch {}
   }
 
-  function handleSaveCredentials(url, key) { saveCreds(url, key); loadTemplates(url, key) }
+  function handleSaveCredentials(url, key, nt, nd) {
+    saveCreds(url, key, nt, nd)
+    loadTemplates(url, key)
+  }
 
   function persistIdeas(list) { setIdeas(list); saveIdeas(list) }
+
+  async function saveToNotion(idea) {
+    if (!notionToken || !notionDbId) throw new Error('Notion未設定')
+    const res = await fetch('/api/notion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: notionToken,
+        database_id: notionDbId,
+        title: idea.title,
+        tags: idea.tags,
+        memo: idea.memo,
+      }),
+    })
+    if (!res.ok) throw new Error(`Notion API error: ${res.status}`)
+    return res.json()
+  }
 
   async function handleSave() {
     if (!title.trim()) return
     setLoading(true)
-    const idea = { id: Date.now(), title: title.trim(), tags: tags.split(/[,、\s]+/).map(t => t.trim()).filter(Boolean), memo: memo.trim(), at: new Date().toLocaleString('ja-JP') }
+    const idea = {
+      id: Date.now(),
+      title: title.trim(),
+      tags: tags.split(/[,、\s]+/).map(t => t.trim()).filter(Boolean),
+      memo: memo.trim(),
+      at: new Date().toLocaleString('ja-JP'),
+    }
     persistIdeas([idea, ...ideas])
     try {
-      await callClaude([{ role: 'user', content: `Notionのinboxデータベースに新しいページを追加してください。\nタイトル: ${idea.title}\nタグ: ${idea.tags.join(', ')}\nメモ:\n${idea.memo || 'なし'}` }], 'NotionのMCPを使ってページを作成するアシスタント。', true)
+      await saveToNotion(idea)
       showToastMsg('保存しました（ローカル + Notion）')
-    } catch { showToastMsg('ローカルに保存しました（Notion送信エラー）', 'err') }
+    } catch (e) {
+      showToastMsg(e.message === 'Notion未設定' ? 'ローカル保存済み（設定タブでNotion設定してください）' : 'ローカルに保存しました（Notion送信エラー）', 'err')
+    }
     setTitle(''); setTags(''); setMemo('')
     setLoading(false)
   }
@@ -82,7 +114,7 @@ export default function App() {
         {tab === 1 && <TabSearch ideas={ideas} />}
         {tab === 2 && <TabExpand onAddIdea={handleAddAiIdea} />}
         {tab === 3 && <TplManager templates={templates} reload={() => loadTemplates(sbUrl, sbKey)} sbUrl={sbUrl} sbKey={sbKey} showToast={showToastMsg} />}
-        {tab === 4 && <Settings sbUrl={sbUrl} sbKey={sbKey} setSbUrl={setSbUrl} setSbKey={setSbKey} showToast={showToastMsg} onSave={handleSaveCredentials} />}
+        {tab === 4 && <Settings sbUrl={sbUrl} sbKey={sbKey} setSbUrl={setSbUrl} setSbKey={setSbKey} notionToken={notionToken} setNotionToken={setNotionToken} notionDbId={notionDbId} setNotionDbId={setNotionDbId} showToast={showToastMsg} onSave={handleSaveCredentials} />}
       </div>
     </div>
   )
